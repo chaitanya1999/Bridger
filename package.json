@@ -1,0 +1,16 @@
+{
+  "name": "bridger",
+  "version": "1.0.0",
+  "description": "Simple Heroku-ready Express proxy utility with a browser playground.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": {
+    "node": "20.x"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}
