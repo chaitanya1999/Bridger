@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bridger — Admin Panel</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; }
+
+      body {
+        background: #0f172a;
+        color: #e2e8f0;
+        font-family: system-ui, -apple-system, sans-serif;
+        padding: 20px;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      h1 small {
+        font-size: 0.8rem;
+        color: #94a3b8;
+        font-weight: 400;
+      }
+
+      .status-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #22c55e;
+        margin-right: 6px;
+      }
+      .status-dot.disconnected { background: #ef4444; }
+
+      .dashboard {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+
+      .card {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 10px;
+        padding: 16px;
+      }
+
+      .card h2 {
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #94a3b8;
+        margin-bottom: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .card h2 .count {
+        background: #334155;
+        color: #e2e8f0;
+        font-size: 0.75rem;
+        padding: 2px 8px;
+        border-radius: 99px;
+      }
+
+      .card .empty {
+        color: #64748b;
+        font-size: 0.85rem;
+        text-align: center;
+        padding: 20px 0;
+      }
+
+      .item-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #0f172a;
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-size: 0.85rem;
+      }
+
+      .item .id {
+        font-family: monospace;
+        color: #38bdf8;
+        word-break: break-all;
+      }
+
+      .item .meta {
+        color: #94a3b8;
+        font-size: 0.75rem;
+      }
+
+      .item button {
+        background: #ef4444;
+        color: white;
+        border: 0;
+        border-radius: 4px;
+        padding: 3px 10px;
+        font-size: 0.75rem;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+
+      .item button:hover { background: #dc2626; }
+      .item button.danger-large {
+        background: #7f1d1d;
+        padding: 6px 16px;
+        font-size: 0.85rem;
+        font-weight: 600;
+      }
+      .item button.danger-large:hover { background: #991b1b; }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      .panel {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 10px;
+        padding: 16px;
+      }
+
+      .panel h2 {
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #94a3b8;
+        margin-bottom: 10px;
+      }
+
+      .log-area {
+        height: 400px;
+        overflow-y: auto;
+        font-family: monospace;
+        font-size: 0.78rem;
+        line-height: 1.6;
+      }
+
+      .log-area .log-entry {
+        padding: 2px 0;
+        border-bottom: 1px solid #1e293b;
+      }
+
+      .log-area .log-entry .time {
+        color: #64748b;
+        margin-right: 8px;
+      }
+
+      .log-area .log-entry.info { color: #94a3b8; }
+      .log-area .log-entry.warn { color: #fbbf24; }
+      .log-area .log-entry.error { color: #ef4444; }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .actions button {
+        background: #334155;
+        color: #e2e8f0;
+        border: 1px solid #475569;
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+
+      .actions button:hover { background: #475569; }
+      .actions button.danger {
+        background: #7f1d1d;
+        border-color: #991b1b;
+      }
+      .actions button.danger:hover { background: #991b1b; }
+
+      .pending-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.82rem;
+      }
+
+      .pending-table th {
+        text-align: left;
+        color: #64748b;
+        font-weight: 600;
+        padding: 6px 8px;
+        border-bottom: 1px solid #334155;
+      }
+
+      .pending-table td {
+        padding: 6px 8px;
+        border-bottom: 1px solid #1e293b;
+        font-family: monospace;
+      }
+
+      .pending-table .age {
+        color: #94a3b8;
+      }
+
+      .hidden { display: none; }
+
+      @media (max-width: 900px) {
+        .dashboard { grid-template-columns: 1fr; }
+        .grid-2 { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>
+      <span class="status-dot" id="connDot"></span>
+      Bridger Admin Panel
+      <small id="connStatus">Disconnected</small>
+    </h1>
+
+    <div class="dashboard">
+      <div class="card">
+        <h2>LLM Clients <span class="count" id="clientCount">0</span></h2>
+        <div class="item-list" id="clientList">
+          <div class="empty">No clients connected</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>LLM Servers <span class="count" id="serverCount">0</span></h2>
+        <div class="item-list" id="serverList">
+          <div class="empty">No servers connected</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Pending Requests <span class="count" id="pendingCount">0</span></h2>
+        <div id="pendingList">
+          <div class="empty">No pending requests</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h2>Event Log</h2>
+        <div class="log-area" id="logArea"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Actions</h2>
+        <div class="actions">
+          <button onclick="disconnectAll()" class="danger">Disconnect All</button>
+          <button onclick="clearLog()">Clear Log</button>
+          <button onclick="reconnect()">Reconnect</button>
+        </div>
+        <div style="margin-top:16px;font-size:0.78rem;color:#64748b;" id="lastUpdate">Last update: —</div>
+      </div>
+    </div>
+
+    <script>
+      const ADMIN_PASSWORD = prompt('Enter admin password:') || 'abc123';
+      let ws = null;
+      let reconnectTimer = null;
+
+      function getWsUrl() {
+        const loc = window.location;
+        const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+        return `${proto}//${loc.host}`;
+      }
+
+      function connect() {
+        if (ws) { ws.close(); }
+
+        const url = getWsUrl();
+        ws = new WebSocket(url);
+
+        ws.onopen = () => {
+          setConnected(true);
+          // Send REGISTER with admin role and password
+          ws.send(JSON.stringify({
+            type: 'REGISTER',
+            role: 'ADMIN',
+            password: ADMIN_PASSWORD,
+          }));
+        };
+
+        ws.onmessage = (event) => {
+          let msg;
+          try {
+            msg = JSON.parse(event.data);
+          } catch {
+            return;
+          }
+
+          switch (msg.type) {
+            case 'REGISTERED':
+              if (msg.role === 'ADMIN') {
+                addLog('info', 'Authenticated as admin');
+                setConnected(true);
+              }
+              break;
+
+            case 'STATUS':
+              updateDashboard(msg);
+              break;
+
+            case 'LOG':
+              addLog(msg.level, msg.message);
+              break;
+
+            case 'ERROR':
+              addLog('error', 'Server: ' + msg.message);
+              if (msg.message.includes('password') || msg.message.includes('Unauthorized')) {
+                alert('Authentication failed: ' + msg.message);
+                ws.close();
+              }
+              break;
+
+            case 'OK':
+              addLog('info', 'Command executed: ' + msg.message);
+              break;
+          }
+        };
+
+        ws.onclose = () => {
+          setConnected(false);
+          addLog('warn', 'Disconnected — reconnecting in 3s');
+          scheduleReconnect();
+        };
+
+        ws.onerror = () => {
+          // onclose will fire after this
+        };
+      }
+
+      function scheduleReconnect() {
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(() => connect(), 3000);
+      }
+
+      function setConnected(connected) {
+        const dot = document.getElementById('connDot');
+        const status = document.getElementById('connStatus');
+        dot.className = 'status-dot' + (connected ? '' : ' disconnected');
+        status.textContent = connected ? 'Connected' : 'Disconnected';
+      }
+
+      function addLog(level, message) {
+        const area = document.getElementById('logArea');
+        const entry = document.createElement('div');
+        entry.className = 'log-entry ' + level;
+        const time = new Date().toLocaleTimeString();
+        entry.innerHTML = `<span class="time">[${time}]</span>${escapeHtml(message)}`;
+        area.appendChild(entry);
+        area.scrollTop = area.scrollHeight;
+
+        // Keep last 200 entries
+        while (area.children.length > 200) {
+          area.removeChild(area.firstChild);
+        }
+      }
+
+      function updateDashboard(status) {
+        const { clients, servers, pending } = status;
+
+        // Update counts
+        document.getElementById('clientCount').textContent = clients.length;
+        document.getElementById('serverCount').textContent = servers.length;
+        document.getElementById('pendingCount').textContent = pending.length;
+
+        // Clients list
+        const clientList = document.getElementById('clientList');
+        if (clients.length === 0) {
+          clientList.innerHTML = '<div class="empty">No clients connected</div>';
+        } else {
+          clientList.innerHTML = clients.map(c => `
+            <div class="item">
+              <div>
+                <div class="id">${escapeHtml(c.id)}</div>
+                <div class="meta">${formatTime(c.connectedAt)}</div>
+              </div>
+              <button onclick="disconnectClient('${escapeJs(c.id)}')">Disconnect</button>
+            </div>
+          `).join('');
+        }
+
+        // Servers list
+        const serverList = document.getElementById('serverList');
+        if (servers.length === 0) {
+          serverList.innerHTML = '<div class="empty">No servers connected</div>';
+        } else {
+          serverList.innerHTML = servers.map(s => `
+            <div class="item">
+              <div>
+                <div class="id">${escapeHtml(s.id)}</div>
+                <div class="meta">${formatTime(s.connectedAt)}</div>
+              </div>
+              <button onclick="disconnectServer('${escapeJs(s.id)}')">Disconnect</button>
+            </div>
+          `).join('');
+        }
+
+        // Pending requests
+        const pendingList = document.getElementById('pendingList');
+        if (pending.length === 0) {
+          pendingList.innerHTML = '<div class="empty">No pending requests</div>';
+        } else {
+          let table = `
+            <table class="pending-table">
+              <thead><tr>
+                <th>Request ID</th>
+                <th>Client</th>
+                <th>Server</th>
+                <th>Age</th>
+              </tr></thead>
+              <tbody>
+          `;
+          for (const p of pending) {
+            table += `
+              <tr>
+                <td>${escapeHtml(p.requestId)}</td>
+                <td>${escapeHtml(p.clientId)}</td>
+                <td>${escapeHtml(p.serverId)}</td>
+                <td class="age">${formatAge(p.age)}</td>
+              </tr>
+            `;
+          }
+          table += '</tbody></table>';
+          pendingList.innerHTML = table;
+        }
+
+        // Last update time
+        document.getElementById('lastUpdate').textContent =
+          'Last update: ' + new Date(status.timestamp).toLocaleTimeString();
+      }
+
+      // ---- Admin commands ----
+
+      function sendCommand(cmd) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(cmd));
+        } else {
+          addLog('error', 'Not connected');
+        }
+      }
+
+      function disconnectClient(clientId) {
+        if (confirm(`Disconnect client "${clientId}"?`)) {
+          sendCommand({ type: 'DISCONNECT_CLIENT', clientId });
+        }
+      }
+
+      function disconnectServer(serverId) {
+        if (confirm(`Disconnect server "${serverId}"?`)) {
+          sendCommand({ type: 'DISCONNECT_SERVER', serverId });
+        }
+      }
+
+      function disconnectAll() {
+        if (confirm('Disconnect ALL clients and servers? This will cancel all pending requests.')) {
+          sendCommand({ type: 'DISCONNECT_ALL' });
+        }
+      }
+
+      function clearLog() {
+        document.getElementById('logArea').innerHTML = '';
+      }
+
+      function reconnect() {
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        connect();
+      }
+
+      // ---- Helpers ----
+
+      function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+      }
+
+      function escapeJs(str) {
+        return str.replace(/'/g, "\\'").replace(/"/g, '"');
+      }
+
+      function formatTime(ts) {
+        if (!ts) return '';
+        return new Date(ts).toLocaleTimeString();
+      }
+
+      function formatAge(ms) {
+        if (ms < 1000) return ms + 'ms';
+        if (ms < 60000) return Math.floor(ms / 1000) + 's';
+        return Math.floor(ms / 60000) + 'm ' + Math.floor((ms % 60000) / 1000) + 's';
+      }
+
+      // ---- Init ----
+      connect();
+    </script>
+  </body>
+</html>

@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const https = require('https');
 const path = require('path');
+const { attachWebSocketServer } = require('./websocketServer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,6 +12,11 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.get('/health', (_req, res) => {
 	res.json({ ok: true });
+});
+
+// Admin panel page
+app.get('/ws-admin', (_req, res) => {
+	res.sendFile(path.join(__dirname, '..', 'public', 'ws-admin.html'));
 });
 
 app.post('/bridge', (req, res) => {
@@ -73,7 +79,11 @@ app.post('/bridge', (req, res) => {
 	}
 });
 
-app.listen(PORT, () => {
+const httpServer = http.createServer(app);
+
+attachWebSocketServer(httpServer);
+
+httpServer.listen(PORT, () => {
 	console.log(`Bridger listening on port ${PORT}`);
 });
 

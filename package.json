@@ -1,16 +1,22 @@
 {
   "name": "bridger",
   "version": "1.0.0",
-  "description": "Simple Heroku-ready Express proxy utility with a browser playground.",
+  "description": "WebSocket relay system for remote Ollama access via OpenAI-compatible API.",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "server-agent": "node src/server-agent/index.js",
+    "client-proxy": "node src/client-proxy/index.js",
+    "test": "node tests/relay.unit.js",
+    "test:integration": "node tests/integration.mock.js",
+    "test:ollama": "node test-real-ollama.js"
   },
   "engines": {
     "node": "20.x"
   },
   "dependencies": {
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "ws": "^8.21.0"
   }
 }
