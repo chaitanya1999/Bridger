@@ -479,7 +479,8 @@ function attachWebSocketServer(httpServer) {
 				}
 
 				default:
-					sendJSON(ws, { type: 'ERROR', message: `Unknown message type: ${msg.type}` });
+					// Include requestId in error response if available, so clients can match
+					sendJSON(ws, { type: 'ERROR', requestId: msg.requestId, message: `Unknown message type: ${msg.type}` });
 			}
 		});
 

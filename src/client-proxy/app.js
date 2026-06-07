@@ -180,26 +180,39 @@ async function createClientProxy(relayUrl, opts = {}) {
 	 */
 	function fetchModelsViaRelay(requestId) {
 		return new Promise((resolve, reject) => {
+			let settled = false;
+
 			const timeout = setTimeout(() => {
+				if (settled) return;
+				settled = true;
 				relay.removeListener('models_list', onModelsList);
 				relay.removeListener('error', onError);
 				reject(new Error('Request timed out'));
 			}, 15_000);
 
+			function cleanup() {
+				clearTimeout(timeout);
+				relay.removeListener('models_list', onModelsList);
+				relay.removeListener('error', onError);
+			}
+
 			function onModelsList(msg) {
+				if (settled) return;
 				if (msg.requestId === requestId) {
-					clearTimeout(timeout);
-					relay.removeListener('models_list', onModelsList);
-					relay.removeListener('error', onError);
+					settled = true;
+					cleanup();
 					resolve(msg.models || []);
 				}
 			}
 
 			function onError(msg) {
-				if (msg.requestId === requestId) {
-					clearTimeout(timeout);
-					relay.removeListener('models_list', onModelsList);
-					relay.removeListener('error', onError);
+				if (settled) return;
+				// Match by requestId if present, otherwise match any error
+				// that arrives during this request's window (handles old relays
+				// that return error without requestId for unknown message types)
+				if (!msg.requestId || msg.requestId === requestId) {
+					settled = true;
+					cleanup();
 					reject(new Error(msg.message || 'Unknown error'));
 				}
 			}
