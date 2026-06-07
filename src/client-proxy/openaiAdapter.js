@@ -23,11 +23,24 @@ function toRelayRequest(openaiReq) {
 		throw new Error('messages array is required');
 	}
 
+	// Normalize content: OpenAI allows string or array of content parts
+	function normalizeContent(content) {
+		if (typeof content === 'string') return content;
+		if (Array.isArray(content)) {
+			// Extract text from content parts (e.g. [{"type":"text","text":"hello"}])
+			return content
+				.filter((p) => p.type === 'text')
+				.map((p) => p.text || '')
+				.join(' ');
+		}
+		return String(content || '');
+	}
+
 	return {
 		model,
 		messages: messages.map((m) => ({
 			role: m.role || 'user',
-			content: m.content || '',
+			content: normalizeContent(m.content),
 		})),
 		stream,
 	};
