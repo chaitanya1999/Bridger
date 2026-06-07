@@ -1,0 +1,18 @@
+###
+# HTTP proxy via relay server (port 3000) — POST example
+# Forward an HTTP POST request with a JSON body to any endpoint.
+###
+curl -X POST http://localhost:3000/bridge \
+  -H "Content-Type: application/json" \
+  -d '{
+    "endpoint": "https://jsonplaceholder.typicode.com/posts",
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "title": "foo",
+      "body": "bar",
+      "userId": 1
+    }
+  }'

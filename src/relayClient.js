@@ -8,20 +8,37 @@ const WebSocket = require('ws');
  * of whether the source is streaming or not.
  *
  * Events:
- *   'registered'  → { role, clientId/serverId }
- *   'request'     → { requestId, clientId, model, messages, stream }
- *   'token'       → { requestId, delta }
- *   'complete'    → { requestId }
- *   'error'       → { requestId?, message }
- *   'cancel'      → { requestId }
- *   'disconnected'→ { reason }
- *   'reconnecting'→ { attempt, delay }
- *   'connected'   → {}
+ *   'registered'   → { role, clientId/serverId }
+ *   'request'      → { requestId, clientId, model, messages, stream }
+ *   'token'        → { requestId, delta }
+ *   'complete'     → { requestId }
+ *   'error'        → { requestId?, message }
+ *   'list_models'  → { requestId }                 (only LLM_SERVER)
+ *   'models_list'  → { requestId, models }         (only LLM_CLIENT)
+ *   'cancel'       → { requestId }
+ *   'disconnected' → { reason }
+ *   'reconnecting' → { attempt, delay }
+ *   'connected'    → {}
  */
 
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30_000;
 const RECONNECT_JITTER = 0.2;
+
+/**
+ * Default log filter — log everything except TOKEN (too noisy during streaming).
+ */
+const DEFAULT_LOG_FILTER = {
+	REGISTER: true,
+	REGISTERED: true,
+	REQUEST: true,
+	TOKEN: true,
+	COMPLETE: true,
+	ERROR: true,
+	CANCEL: true,
+	LIST_MODELS: true,
+	MODELS_LIST: true,
+};
 
 class RelayClient extends require('events').EventEmitter {
 	/**
@@ -32,6 +49,9 @@ class RelayClient extends require('events').EventEmitter {
 	 * @param {string} [opts.serverId]    Optional for LLM_SERVER (auto-generated if omitted)
 	 * @param {string} [opts.secret]      Shared secret for LLM_SERVER auth
 	 * @param {boolean} [opts.autoReconnect=true]
+	 * @param {object} [opts.logFilter]   Map of message type → boolean (enabled/disabled).
+	 *                                    Overrides DEFAULT_LOG_FILTER per type.
+	 *                                    Set to null or { all: false } to silence all logs.
 	 */
 	constructor(url, opts = {}) {
 		super();
@@ -42,11 +62,49 @@ class RelayClient extends require('events').EventEmitter {
 		this.secret = opts.secret;
 		this.autoReconnect = opts.autoReconnect !== false;
 
+		// Build log filter: start with default, overlay any user-provided overrides
+		this._logFilter = { ...DEFAULT_LOG_FILTER };
+		if (opts.logFilter) {
+			if (opts.logFilter.all === false) {
+				// Silence all
+				for (const key of Object.keys(this._logFilter)) {
+					this._logFilter[key] = false;
+				}
+			} else {
+				for (const [key, val] of Object.entries(opts.logFilter)) {
+					if (key in this._logFilter) {
+						this._logFilter[key] = val;
+					}
+				}
+			}
+		}
+
 		this.ws = null;
 		this.registered = false;
 		this._reconnectAttempt = 0;
 		this._reconnectTimer = null;
 		this._intentionalClose = false;
+	}
+
+	/** Format a message for logging — shows type, requestId, and relevant metadata. */
+	_formatMsg(obj) {
+		let s = obj.type;
+		if (obj.requestId) s += ` ${obj.requestId}`;
+		if (obj.model) s += ` (model=${obj.model})`;
+		if (obj.type === 'TOKEN' && obj.delta) {
+			const preview = (obj.delta.content || '').slice(0, 40);
+			s += ` (${preview.length} chars: "${preview}...")`;
+		}
+		if (obj.type === 'MODELS_LIST' && Array.isArray(obj.models)) {
+			s += ` (${obj.models.length} models)`;
+		}
+		if (obj.type === 'ERROR' && obj.message) {
+			s += ` "${obj.message.slice(0, 60)}"`;
+		}
+		if (obj.type === 'REGISTER') {
+			s += ` (${obj.role}${obj.clientId ? ', ' + obj.clientId : ''}${obj.serverId ? ', ' + obj.serverId : ''})`;
+		}
+		return s;
 	}
 
 	// ---- Public API ----
@@ -75,6 +133,9 @@ class RelayClient extends require('events').EventEmitter {
 					registerMsg.serverId = this.serverId;
 					if (this.secret) registerMsg.secret = this.secret;
 				}
+				if (this._shouldLog('REGISTER')) {
+					console.log(`[RelayClient:${this.role}] → ${this._formatMsg(registerMsg)}`);
+				}
 				ws.send(JSON.stringify(registerMsg));
 			});
 
@@ -84,6 +145,10 @@ class RelayClient extends require('events').EventEmitter {
 					msg = JSON.parse(raw.toString());
 				} catch {
 					return;
+				}
+
+				if (this._shouldLog(msg.type)) {
+					console.log(`[RelayClient:${this.role}] ← ${this._formatMsg(msg)}`);
 				}
 
 				switch (msg.type) {
@@ -116,6 +181,14 @@ class RelayClient extends require('events').EventEmitter {
 						if (!this.registered) {
 							reject(new Error(msg.message));
 						}
+						break;
+
+					case 'LIST_MODELS':
+						this.emit('list_models', msg);
+						break;
+
+					case 'MODELS_LIST':
+						this.emit('models_list', msg);
 						break;
 
 					case 'CANCEL':
@@ -179,6 +252,16 @@ class RelayClient extends require('events').EventEmitter {
 		this._send({ type: 'ERROR', requestId, message });
 	}
 
+	/** Send a LIST_MODELS request to the relay. */
+	sendListModels(requestId) {
+		this._send({ type: 'LIST_MODELS', requestId });
+	}
+
+	/** Send a MODELS_LIST response (only valid for LLM_SERVER). */
+	sendModelsList(requestId, models) {
+		this._send({ type: 'MODELS_LIST', requestId, models });
+	}
+
 	/** Send a CANCEL message. */
 	sendCancel(requestId) {
 		this._send({ type: 'CANCEL', requestId });
@@ -200,7 +283,14 @@ class RelayClient extends require('events').EventEmitter {
 
 	// ---- Internal ----
 
+	_shouldLog(type) {
+		return this._logFilter[type] === true;
+	}
+
 	_send(obj) {
+		if (this._shouldLog(obj.type)) {
+			console.log(`[RelayClient:${this.role}] → ${this._formatMsg(obj)}`);
+		}
 		if (this.ws && this.ws.readyState === WebSocket.OPEN) {
 			this.ws.send(JSON.stringify(obj));
 		} else {

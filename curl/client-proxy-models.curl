@@ -1,0 +1,6 @@
+###
+# List models available on the remote Ollama instance via client-proxy (port 3001)
+# Requires: Authorization: Bearer dummy
+###
+curl -X GET http://localhost:3001/v1/models \
+  -H "Authorization: Bearer dummy"

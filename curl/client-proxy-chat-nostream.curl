@@ -1,0 +1,12 @@
+###
+# Non-streaming chat completion via client-proxy (port 3001)
+# Requires: Authorization: Bearer dummy
+###
+curl -X POST http://localhost:3001/v1/chat/completions \
+  -H "Authorization: Bearer dummy" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "rafw007/qwen35-claude-coder:4b",
+    "messages": [{"role": "user", "content": "Hello! What is 2+2?"}],
+    "stream": false
+  }'

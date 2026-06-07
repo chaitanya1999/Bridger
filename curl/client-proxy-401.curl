@@ -1,0 +1,12 @@
+###
+# Test auth failure — send wrong API key to client-proxy (port 3001)
+# Expected: 401 response with {"error":{"message":"Invalid API key",...}}
+###
+curl -X POST http://localhost:3001/v1/chat/completions \
+  -H "Authorization: Bearer wrong-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "llama3",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": false
+  }'

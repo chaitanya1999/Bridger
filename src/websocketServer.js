@@ -21,6 +21,8 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'abc123';
  *   TOKEN              → { type, requestId, delta }
  *   COMPLETE           → { type, requestId }
  *   ERROR              → { type, requestId, message }
+ *   LIST_MODELS        → { type, requestId }                  (LLM_CLIENT → relay → LLM_SERVER)
+ *   MODELS_LIST        → { type, requestId, models }          (LLM_SERVER → relay → LLM_CLIENT)
  *   CANCEL             → { type, requestId }
  *   DISCONNECT_CLIENT  → { type, clientId }       (ADMIN only)
  *   DISCONNECT_SERVER  → { type, serverId }       (ADMIN only)
@@ -84,8 +86,52 @@ function attachWebSocketServer(httpServer) {
 
 	// ---- Helpers ----
 
+	/**
+	 * Default log filter for relay-side message forwarding.
+	 * TOKEN is disabled by default (too noisy during streaming).
+	 */
+	const RELAY_LOG_FILTER = {
+		REGISTER: true,
+		REGISTERED: true,
+		REQUEST: true,
+		TOKEN: true,
+		COMPLETE: true,
+		ERROR: true,
+		CANCEL: true,
+		LIST_MODELS: true,
+		MODELS_LIST: true,
+	};
+
+	/** Format a relay message for logging. */
+	function formatRelayMsg(obj, direction) {
+		let s = `[Relay] ${direction} ${obj.type}`;
+		if (obj.requestId) s += ` ${obj.requestId}`;
+		if (obj.model) s += ` (model=${obj.model})`;
+		if (obj.type === 'TOKEN' && obj.delta) {
+			const preview = (obj.delta.content || '').slice(0, 40);
+			s += ` (${preview.length} chars: "${preview}...")`;
+		}
+		if (obj.type === 'MODELS_LIST' && Array.isArray(obj.models)) {
+			s += ` (${obj.models.length} models)`;
+		}
+		if (obj.type === 'ERROR' && obj.message) {
+			s += ` "${obj.message.slice(0, 60)}"`;
+		}
+		if (obj.type === 'CANCEL' && obj.requestId) {
+			// Show which role sent the CANCEL (will be context-dependent)
+		}
+		return s;
+	}
+
+	function shouldLogRelay(type) {
+		return RELAY_LOG_FILTER[type] === true;
+	}
+
 	function sendJSON(ws, obj) {
 		if (ws.readyState === WebSocket.OPEN) {
+			if (shouldLogRelay(obj.type)) {
+				console.log(formatRelayMsg(obj, '→'));
+			}
 			ws.send(JSON.stringify(obj));
 		}
 	}
@@ -259,6 +305,59 @@ function attachWebSocketServer(httpServer) {
 						stream,
 					});
 					adminLog('info', `REQUEST ${requestId}: ${ws._clientId} → ${server.serverId} (model: ${model})`);
+					break;
+				}
+
+				case 'LIST_MODELS': {
+					if (ws._role !== 'LLM_CLIENT') {
+						sendJSON(ws, { type: 'ERROR', message: 'Only LLM-Clients may send LIST_MODELS' });
+						return;
+					}
+					const { requestId } = msg;
+					if (!requestId) {
+						sendJSON(ws, { type: 'ERROR', message: 'requestId is required for LIST_MODELS' });
+						return;
+					}
+
+					const server = pickServer();
+					if (!server) {
+						sendJSON(ws, { type: 'ERROR', requestId, message: 'No LLM-Server available' });
+						return;
+					}
+
+					// Track as a pending request so MODELS_LIST can be routed back
+					pendingRequests.set(requestId, {
+						clientId: ws._clientId,
+						serverId: server.serverId,
+						createdAt: Date.now(),
+					});
+
+					sendJSON(server.ws, { type: 'LIST_MODELS', requestId });
+					adminLog('info', `LIST_MODELS ${requestId}: ${ws._clientId} → ${server.serverId}`);
+					break;
+				}
+
+				case 'MODELS_LIST': {
+					if (ws._role !== 'LLM_SERVER') {
+						sendJSON(ws, { type: 'ERROR', message: 'Only LLM-Servers may send MODELS_LIST' });
+						return;
+					}
+					const { requestId: mlRequestId, models } = msg;
+					if (!mlRequestId) {
+						sendJSON(ws, { type: 'ERROR', message: 'requestId is required for MODELS_LIST' });
+						return;
+					}
+					const mlReq = pendingRequests.get(mlRequestId);
+					if (!mlReq) {
+						// Request may have timed out — silently drop
+						return;
+					}
+					pendingRequests.delete(mlRequestId);
+					const clientWs = llmClients.get(mlReq.clientId);
+					if (clientWs) {
+						sendJSON(clientWs, { type: 'MODELS_LIST', requestId: mlRequestId, models });
+					}
+					adminLog('info', `MODELS_LIST ${mlRequestId}: ${models?.length || 0} models`);
 					break;
 				}
 

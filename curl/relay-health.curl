@@ -1,0 +1,6 @@
+###
+# Health check for the relay server (port 3000)
+# No authentication required.
+# Expected: {"ok":true}
+###
+curl -X GET http://localhost:3000/health

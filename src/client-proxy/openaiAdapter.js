@@ -165,10 +165,8 @@ function createJSONResponse(res, model, id) {
 		'Content-Type': 'application/json',
 	};
 
-	function sendFinal() {
-		if (isEnded) return;
-		isEnded = true;
-		res.json({
+	function buildFinalBody() {
+		return {
 			id: responseId,
 			object: 'chat.completion',
 			created,
@@ -188,7 +186,14 @@ function createJSONResponse(res, model, id) {
 				completion_tokens: -1,
 				total_tokens: -1,
 			},
-		});
+		};
+	}
+
+	function sendFinal() {
+		if (isEnded) return;
+		isEnded = true;
+		// Headers already sent by caller — just end with JSON body
+		res.end(JSON.stringify(buildFinalBody()));
 	}
 
 	return {
@@ -205,14 +210,17 @@ function createJSONResponse(res, model, id) {
 		onError(requestId, message) {
 			if (isEnded) return;
 			isEnded = true;
-			res.status(500).json({
-				error: {
-					message,
-					type: 'server_error',
-					param: null,
-					code: null,
-				},
-			});
+			// Send 500 inline — if headers already sent this would fail,
+			// so we send an error JSON and let the client handle it
+			if (res.headersSent) {
+				res.end(JSON.stringify({
+					error: { message, type: 'server_error', param: null, code: null },
+				}));
+			} else {
+				res.status(500).json({
+					error: { message, type: 'server_error', param: null, code: null },
+				});
+			}
 		},
 
 		end() {

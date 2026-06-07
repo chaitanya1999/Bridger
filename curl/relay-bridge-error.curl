@@ -1,0 +1,9 @@
+###
+# HTTP proxy error case — missing required "endpoint" field
+# Expected: 400 response with {"error":"`endpoint` is required"}
+###
+curl -X POST http://localhost:3000/bridge \
+  -H "Content-Type: application/json" \
+  -d '{
+    "method": "GET"
+  }'

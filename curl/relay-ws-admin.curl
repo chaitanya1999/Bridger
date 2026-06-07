@@ -1,0 +1,6 @@
+###
+# Access the admin panel page (HTML) served by the relay server (port 3000)
+# Open in browser for the interactive admin dashboard at /ws-admin.
+# No authentication required (password is entered in the browser UI).
+###
+curl -X GET http://localhost:3000/ws-admin

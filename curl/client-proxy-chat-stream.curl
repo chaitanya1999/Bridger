@@ -1,0 +1,13 @@
+###
+# Streaming chat completion via client-proxy (port 3001)
+# Tokens will arrive as SSE (Server-Sent Events).
+# Requires: Authorization: Bearer dummy
+###
+curl -X POST http://localhost:3001/v1/chat/completions \
+  -H "Authorization: Bearer dummy" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "rafw007/qwen35-claude-coder:4b",
+    "messages": [{"role": "user", "content": "Count from 1 to 5"}],
+    "stream": true
+  }'

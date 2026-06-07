@@ -1,0 +1,10 @@
+###
+# HTTP proxy via relay server (port 3000) — GET example
+# Forward an HTTP GET request to any endpoint.
+###
+curl -X POST http://localhost:3000/bridge \
+  -H "Content-Type: application/json" \
+  -d '{
+    "endpoint": "https://jsonplaceholder.typicode.com/posts/1",
+    "method": "GET"
+  }'
